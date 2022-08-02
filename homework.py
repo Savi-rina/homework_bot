@@ -1,9 +1,10 @@
+import json
 import logging
 from logging import StreamHandler
-import os  # чтобы получить доступ к переменным окружения из кода через getenv
+import os
+import sys
 import time
 from http import HTTPStatus
-
 
 import requests
 import telegram
@@ -12,14 +13,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Взяли переменные из пространства переменных окружения
 PRACTICUM_TOKEN = os.getenv('PRACTICUM')
 TELEGRAM_TOKEN = os.getenv('TELEGRAM')
 TELEGRAM_CHAT_ID = os.getenv('CHAT_ID')
 
 RETRY_TIME = 600
 ENDPOINT = 'https://practicum.yandex.ru/api/user_api/homework_statuses/'
-# в заголовке запроса передан токен авторизации
 HEADERS = {'Authorization': f'OAuth {PRACTICUM_TOKEN}'}
 
 
@@ -47,8 +46,8 @@ def send_message(bot, message):
         bot.send_message(TELEGRAM_CHAT_ID, message)
         logger.info(
             f'Сообщение в Telegram отправлено: {message}')
-    except Exception as error:
-        message = f'Сообщение в Telegram не отправлено: {error}'
+    except telegram.TelegramErrors as telegram_error:
+        message = f'Сообщение в Telegram не отправлено: {telegram_error}'
         logger.error(message)
 
 
@@ -59,7 +58,7 @@ def get_api_answer(current_timestamp):
     преобразовав его из формата JSON к типам данных Python.
     """
     timestamp = current_timestamp or int(time.time())
-    params = {'from_date': timestamp}  # метка времени
+    params = {'from_date': timestamp}
     try:
         response = requests.get(ENDPOINT, headers=HEADERS, params=params)
         if response.status_code != HTTPStatus.OK:
@@ -67,6 +66,9 @@ def get_api_answer(current_timestamp):
         logger.info('Запрос к API успешно выполнен.')
 
         return response.json()
+
+    except json.decoder.JSONDecodeError:
+        raise Exception('Преобразование в json не осуществлено')
 
     except Exception as error:
         message = f'Ошибка при запросе к API Практикум.Домашка: {error}'
@@ -82,26 +84,26 @@ def check_response(response):
     список домашних работ, доступный в ответе API по ключу 'homeworks'.
     """
     hw_list = response['homeworks']
+    logger.info('Корректный ответ API.')
+
+    if 'homeworks' not in response.keys():
+        raise KeyError('Ключ homeworks отсутствует')
+
     if not isinstance(hw_list, list):
         message = 'В ответе API домашки выводятся не списком.'
         logger.error(message)
         raise Exception(message)
 
-    try:
-        hw_list = response['homeworks']
-        logger.info('Корректный ответ API.')
+    if type(hw_list) is not list:
+        raise TypeError('Домашняя работа приходит не ввиде списка')
 
-    except Exception:
-        if type(response) is not dict:
-            message = f'Некорректный тип данных: {response}'
-            logger.error(message)
-            raise TypeError(message)
+    if type(response) is not dict:
+        message = f'Некорректный тип данных: {response}'
+        logger.error(message)
+        raise TypeError(message)
 
-        hw_list = response.get('homeworks')
-        if len(hw_list) == 0:
-            message = 'На проверку ничего не отправлено.'
-            logger.error(message)
-            raise Exception(message)
+    if 'current_date' not in response.keys():
+        raise KeyError('Ключ current_date отсутствует')
 
     return hw_list
 
@@ -115,6 +117,12 @@ def parse_status(homework):
     """
     homework_name = homework['homework_name']
     homework_status = homework['status']
+
+    if 'homework_name' not in homework.keys():
+        raise KeyError('Ключ homework_name отсутствует')
+
+    if 'status' not in homework.keys():
+        raise KeyError('Ключ homework_status отсутствует')
 
     try:
         verdict = HOMEWORK_STATUSES[homework_status]
@@ -159,27 +167,34 @@ def main():
     current_timestamp = int(time.time())
 
     if not check_tokens():
-        exit()
-    send_message(bot, START_MESSAGE)
-
+        logger.critical('Токен(ы) отсутствует(ют)')
+        sys.exit()
+    first_message = ''
     while True:
+        send_message(bot, START_MESSAGE)
         try:
             response = get_api_answer(current_timestamp)
-            homework = check_response(response)
-
-            try:
-                homework = check_response(response)[0]
-                message = parse_status(homework)
-            except IndexError:
-                message = 'Нет домашки на проверку.'
-                logger.error(message)
-                raise Exception(message)
-            current_timestamp = response.get('current_date')
+            homeworks = check_response(response)
+            if homeworks:
+                message = parse_status(homeworks[0])
+                first_message = message
+                if first_message != message:
+                    send_message(bot, message)
+                    first_message = message
+                else:
+                    logger.error(f'Повторяющееся сообщение: {message}')
+                current_timestamp = response['current_date']
+            else:
+                logger.info('домашек нет')
 
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
-            logger.error(message)
-            send_message(bot, message)
+            if first_message != message:
+                logger.error(message)
+                send_message(bot, message)
+                first_message = message
+            else:
+                logger.error(f'Повторяющееся сообщение: {message}')
         finally:
             time.sleep(RETRY_TIME)
 
