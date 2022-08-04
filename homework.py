@@ -83,26 +83,23 @@ def check_response(response):
     Если ответ API соответствует ожиданиям, то функция должна вернуть
     список домашних работ, доступный в ответе API по ключу 'homeworks'.
     """
+    if not isinstance(response, dict):
+        message = f'Некорректный тип данных: {response}'
+        logger.error(message)
+        raise TypeError(message)
+
+    if 'homeworks' not in response:
+        raise KeyError('Ключ homeworks отсутствует')
+
     hw_list = response['homeworks']
     logger.info('Корректный ответ API.')
-
-    if 'homeworks' not in response.keys():
-        raise KeyError('Ключ homeworks отсутствует')
 
     if not isinstance(hw_list, list):
         message = 'В ответе API домашки выводятся не списком.'
         logger.error(message)
         raise Exception(message)
 
-    if type(hw_list) is not list:
-        raise TypeError('Домашняя работа приходит не ввиде списка')
-
-    if type(response) is not dict:
-        message = f'Некорректный тип данных: {response}'
-        logger.error(message)
-        raise TypeError(message)
-
-    if 'current_date' not in response.keys():
+    if 'current_date' not in response:
         raise KeyError('Ключ current_date отсутствует')
 
     return hw_list
@@ -115,14 +112,14 @@ def parse_status(homework):
     В случае успеха, функция возвращает подготовленную для отправки в Telegram
     строку, содержащую один из вердиктов словаря HOMEWORK_STATUSES.
     """
-    homework_name = homework['homework_name']
-    homework_status = homework['status']
-
-    if 'homework_name' not in homework.keys():
+    if 'homework_name' not in homework:
         raise KeyError('Ключ homework_name отсутствует')
 
-    if 'status' not in homework.keys():
+    if 'status' not in homework:
         raise KeyError('Ключ homework_status отсутствует')
+
+    homework_name = homework['homework_name']
+    homework_status = homework['status']
 
     try:
         verdict = HOMEWORK_STATUSES[homework_status]
@@ -145,7 +142,7 @@ def check_tokens():
     vars_from_env = [PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]
     message = 'Нет обязательных переменных окружения во время запуска бота'
 
-    if all(vars_from_env) is True:
+    if all(vars_from_env):
         logger.info('Необходимые переменные окружения доступны.')
 
         return True
@@ -177,7 +174,6 @@ def main():
             homeworks = check_response(response)
             if homeworks:
                 message = parse_status(homeworks[0])
-                first_message = message
                 if first_message != message:
                     send_message(bot, message)
                     first_message = message
