@@ -28,7 +28,6 @@ HOMEWORK_STATUSES = {
     'rejected': 'Работа проверена: у ревьюера есть замечания.',
 }
 
-START_MESSAGE = 'Привет! Давай узнаем что там с твоей домашкой!'
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -158,13 +157,8 @@ def main():
         sys.exit()
 
     first_message = ''
+
     while True:
-        try:
-            send_message(bot, START_MESSAGE)
-            logger.info('Стартовое сообщение в Telegram отправлено')
-        except telegram.TelegramError:
-            message = 'Стартовое сообщение в Telegram не отправлено'
-            logger.error(message)
 
         try:
             response = get_api_answer(current_timestamp)
