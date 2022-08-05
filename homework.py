@@ -46,7 +46,7 @@ def send_message(bot, message):
         bot.send_message(TELEGRAM_CHAT_ID, message)
         logger.info(
             f'Сообщение в Telegram отправлено: {message}')
-    except telegram.TelegramErrors as telegram_error:
+    except telegram.TelegramError as telegram_error:
         message = f'Сообщение в Telegram не отправлено: {telegram_error}'
         logger.error(message)
 
@@ -72,7 +72,6 @@ def get_api_answer(current_timestamp):
 
     except Exception as error:
         message = f'Ошибка при запросе к API Практикум.Домашка: {error}'
-        logger.error(message)
         raise Exception(message)
 
 
@@ -85,24 +84,22 @@ def check_response(response):
     """
     if not isinstance(response, dict):
         message = f'Некорректный тип данных: {response}'
-        logger.error(message)
         raise TypeError(message)
 
     if 'homeworks' not in response:
         raise KeyError('Ключ homeworks отсутствует')
 
-    hw_list = response['homeworks']
+    homework_list = response['homeworks']
     logger.info('Корректный ответ API.')
 
-    if not isinstance(hw_list, list):
+    if not isinstance(homework_list, list):
         message = 'В ответе API домашки выводятся не списком.'
-        logger.error(message)
         raise Exception(message)
 
     if 'current_date' not in response:
         raise KeyError('Ключ current_date отсутствует')
 
-    return hw_list
+    return homework_list
 
 
 def parse_status(homework):
@@ -128,7 +125,6 @@ def parse_status(homework):
     except Exception:
         if homework_status not in HOMEWORK_STATUSES:
             message = f'Неизвестный статус домашней работы: {homework_status}'
-            logger.error(message)
             raise Exception(message)
 
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
@@ -140,17 +136,11 @@ def check_tokens():
     функция должна вернуть False, иначе — True.
     """
     vars_from_env = [PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]
-    message = 'Нет обязательных переменных окружения во время запуска бота'
 
     if all(vars_from_env):
         logger.info('Необходимые переменные окружения доступны.')
 
         return True
-
-    else:
-        logger.critical(message)
-
-        return False
 
 
 def main():
@@ -166,16 +156,29 @@ def main():
     if not check_tokens():
         logger.critical('Токен(ы) отсутствует(ют)')
         sys.exit()
+
     first_message = ''
     while True:
-        send_message(bot, START_MESSAGE)
+        try:
+            send_message(bot, START_MESSAGE)
+            logger.info('Стартовое сообщение в Telegram отправлено')
+        except telegram.TelegramError:
+            message = 'Стартовое сообщение в Telegram не отправлено'
+            logger.error(message)
+
         try:
             response = get_api_answer(current_timestamp)
             homeworks = check_response(response)
             if homeworks:
                 message = parse_status(homeworks[0])
                 if first_message != message:
-                    send_message(bot, message)
+                    try:
+                        send_message(bot, message)
+                    except Exception:
+                        message = 'Сообщение не отправлено'
+                        logger.error(message)
+                        raise Exception(message)
+
                     first_message = message
                 else:
                     logger.error(f'Повторяющееся сообщение: {message}')
