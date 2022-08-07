@@ -43,8 +43,7 @@ def send_message(bot, message):
     """Отправляет сообщение в Telegram чат."""
     try:
         bot.send_message(TELEGRAM_CHAT_ID, message)
-        logger.info(
-            f'Сообщение в Telegram отправлено: {message}')
+        logger.info(f'Сообщение в Telegram отправлено: {message}')
     except telegram.TelegramError as telegram_error:
         message = f'Сообщение в Telegram не отправлено: {telegram_error}'
         logger.error(message)
@@ -120,13 +119,12 @@ def parse_status(homework):
     try:
         verdict = HOMEWORK_STATUSES[homework_status]
         logger.info('Вердикт обновлен')
+        return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
     except Exception:
         if homework_status not in HOMEWORK_STATUSES:
             message = f'Неизвестный статус домашней работы: {homework_status}'
             raise Exception(message)
-
-    return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
 
 def check_tokens():
@@ -136,10 +134,7 @@ def check_tokens():
     """
     vars_from_env = [PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]
 
-    if all(vars_from_env):
-        logger.info('Необходимые переменные окружения доступны.')
-
-        return True
+    return all(vars_from_env)
 
 
 def main():
@@ -166,19 +161,17 @@ def main():
             if homeworks:
                 message = parse_status(homeworks[0])
                 if first_message != message:
-                    try:
-                        send_message(bot, message)
-                    except Exception:
-                        message = 'Сообщение не отправлено'
-                        logger.error(message)
-                        raise Exception(message)
-
+                    send_message(bot, message)
                     first_message = message
                 else:
                     logger.error(f'Повторяющееся сообщение: {message}')
                 current_timestamp = response['current_date']
             else:
                 logger.info('домашек нет')
+
+        except telegram.TelegramError as telegram_error:
+            message = f'Сбой в работе Telegram: {telegram_error}'
+            logger.error(message)
 
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
