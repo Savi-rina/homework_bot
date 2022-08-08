@@ -8,6 +8,7 @@ from http import HTTPStatus
 
 import requests
 import telegram
+from telegram import TelegramError
 
 from dotenv import load_dotenv
 
@@ -46,7 +47,7 @@ def send_message(bot, message):
         logger.info(f'Сообщение в Telegram отправлено: {message}')
     except telegram.TelegramError as telegram_error:
         message = f'Сообщение в Telegram не отправлено: {telegram_error}'
-        logger.error(message)
+        raise TelegramError(message)
 
 
 def get_api_answer(current_timestamp):
